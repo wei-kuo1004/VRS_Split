@@ -1,0 +1,15 @@
+[
+    {
+        "rtsp_url": "rtsp://hikvision:Unitech0815!@10.20.233.40/Streaming/Channels/101",
+        "cooldown_seconds": 300,
+        "eye_close_threshold": 0.015,
+        "close_threshold_frames": 100,
+        "head_turn_threshold": 50,
+        "head_turn_frames": 100,
+        "missing_cap_frames": 50,
+        "missing_mask_frames": 50,
+        "camera_id": "202001",
+        "location": "UT2-2F-01",
+        "upload_url": "https://eip.pcbut.com.tw/File/UploadYoloImage"
+    }
+]
