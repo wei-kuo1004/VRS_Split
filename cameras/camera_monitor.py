@@ -163,8 +163,8 @@ class CameraMonitor:
                     self.r_eye_value = r_eye
 
                     eyes_closed = (
-                        0.001 < l_eye < self.config["eye_close_threshold"] and
-                        0.001 < r_eye < self.config["eye_close_threshold"]
+                        l_eye < self.config["eye_close_threshold"] and
+                        r_eye < self.config["eye_close_threshold"]
                     )
                     if eyes_closed:
                         if not self.cooldown_mgr.is_in_cooldown(self.config["camera_id"], "EYES CLOSED"):
@@ -352,7 +352,7 @@ class CameraMonitor:
             if i < len(keypoints) and j < len(keypoints):
                 if keypoints[i][2] > conf_thr and keypoints[j][2] > conf_thr:
                     cv2.line(img, (int(keypoints[i][0]), int(keypoints[i][1])),
-                             (int(keypoints[j][0]), int(keypoints[j][1])), (0, 255, 255), 2)
+                             (int(keypoints[j][0]), int(keypoints[j][1])), (0, 255, 255), 1)
         head_points = {0: "Nose", 1: "L_Eye", 2: "R_Eye", 3: "L_Ear", 4: "R_Ear"}
         for idx, name in head_points.items():
             if idx < len(keypoints) and keypoints[idx][2] > conf_thr:
@@ -368,11 +368,49 @@ class CameraMonitor:
                 x, y = int(lm.x * iw), int(lm.y * ih)
                 cv2.circle(img, (x, y), 2, (255, 160, 0), -1)
 
-    def draw_box(self, img, box, label, color):
-        x1, y1, x2, y2 = box
-        cv2.rectangle(img, (x1, y1), (x2, y2), color, 2)
-        cv2.rectangle(img, (x1, y1 - 18), (x1 + max(60, len(label) * 9), y1), color, -1)
-        cv2.putText(img, label, (x1 + 4, y1 - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
+    def draw_box(self, image, box, label, color=None):
+        """
+        在畫面上繪製標註框與標籤文字
+        - cap / mouth / head：文字顯示在框上方
+        - mask / others：文字顯示在框下方
+        - cap：綠色框 (0,255,0)
+        - mask：白色框 (255,255,255)
+        """
+        x1, y1, x2, y2 = map(int, box)
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        scale = 0.6
+        thickness = 2
+        text_color = (0, 0, 0)  # 黑色文字
+        (w, h), _ = cv2.getTextSize(label, font, scale, thickness)
+
+        label_lower = label.lower()
+
+        # ===== 框顏色邏輯 =====
+        if "cap" in label_lower:
+            color = (0, 255, 0)          # 綠色
+        elif "mask" in label_lower:
+            color = (255, 255, 255)      # 白色
+        elif "mouth" in label_lower:
+            color = (0, 0, 255)          # 紅色
+        else:
+            color = color or (255, 255, 0)  # 黃色作為預設
+
+        # ===== 繪製框線 =====
+        cv2.rectangle(image, (x1, y1), (x2, y2), color, 1)
+
+        # ===== 文字位置邏輯 =====
+        if any(k in label_lower for k in ["cap", "mouth", "head"]):
+            # 顯示在框上方
+            y_text = max(y1 - 5, h + 5)
+        else:
+            # 顯示在框下方
+            y_text = min(y2 + h + 10, image.shape[0] - 5)
+
+        # ===== 背景方塊（與框同色） =====
+        cv2.rectangle(image, (x1, y_text - h - 6), (x1 + w + 6, y_text), color, -1)
+        cv2.putText(image, label, (x1 + 3, y_text - 4), font, scale, text_color, thickness)
+
+
 
     def reset_counter(self, alert_type):
         if alert_type == "EYES CLOSED":
