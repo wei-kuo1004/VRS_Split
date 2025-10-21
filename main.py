@@ -23,8 +23,8 @@ def main():
     pose_model, maskcap_model = load_models()
 
     # 啟動上傳背景執行緒
-    upload_thread = threading.Thread(target=upload_worker, daemon=True)
-    upload_thread.start()
+    from utils.uploader import start_upload_workers
+    start_upload_workers(num_workers=3)  # 建議3~5個執行緒
 
     valid_configs = []
     for cam in cameras_config:
@@ -43,6 +43,8 @@ def main():
         monitor = CameraMonitor(cfg, idx, pose_model, maskcap_model)
         threading.Thread(target=monitor.read_thread_func, daemon=True).start()
         threading.Thread(target=monitor.process_thread_func, daemon=True).start()
+        threading.Thread(target=monitor.display_thread_func, daemon=True).start()
+
 
     logging.info(f"🟢 實際啟用 {len(valid_configs)} 台攝影機")
     while True:
