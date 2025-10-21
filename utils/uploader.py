@@ -187,7 +187,7 @@ def upload_worker(worker_id=1):
                 "🧠 特徵項目：專注度辨識\n"
                 f"📄 內容：{result_msg}\n\n"
                 "請儘速處理此事件並依據公司規定採取適當行動。\n"
-                "如需更多詳細資料，可聯絡資訊處AI課調閱更詳細影像。\n"
+                "如需更多詳細資料，可聯絡資訊處系統一課調閱更詳細影像。\n"
                 "問題回報表單：https://forms.gle/rFZXVRP1aUxqQNG97"
             )
 
