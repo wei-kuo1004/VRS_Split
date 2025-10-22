@@ -102,7 +102,7 @@
         "head_turn_frames": 100,
         "missing_cap_frames": 50,
         "missing_mask_frames": 50,
-        "camera_id": "202013",
+        "camera_id": "202012",
         "location": "UT2-2F-12",
         "upload_url": "https://eip.pcbut.com.tw/File/UploadYoloImage"
     },

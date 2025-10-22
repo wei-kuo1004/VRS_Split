@@ -1,7 +1,7 @@
 #uploader.py
 #使用https://lineapi.pcbut.com.tw:888/api/account/login 取得TOKEN
 #VRS聊天室群組ID chatId 83D9B831-E46E-46D2-A985-9CDB1175D462
-#測試用chatId C5778A16-C191-408D-A9F6-16483ED57F3E
+#測試用chatId 2F0177B1-2AB0-471B-9001-E40B134F4D0F
 #使用https://lineapi.pcbut.com.tw:888/api/notify-with-img 發送訊息與圖片
 
 # ==========================================================
@@ -31,7 +31,7 @@ NOTIFY_URL = "https://lineapi.pcbut.com.tw:888/api/Push/notify-with-img"
 
 USERNAME = "utbot"
 PASSWORD = "mi2@admin5566"
-CHAT_ID = "C5778A16-C191-408D-A9F6-16483ED57F3E"  # ⚠️ 測試用聊天室群組ID
+CHAT_ID = "2F0177B1-2AB0-471B-9001-E40B134F4D0F"  # ⚠️ 測試用聊天室群組ID
 #CHAT_ID = "83D9B831-E46E-46D2-A985-9CDB1175D462"  # ⚠️ VRS聊天室群組ID
 
 # ==========================================================
@@ -47,7 +47,7 @@ _queue_log_timer = 0  # 控制 queue size log 頻率
 valid_result_msgs = {
     "EYES CLOSED": "疑似閉眼過久，專注度下降。",
     "HEAD TURNED": "疑似長時間轉頭未注意作業方向。",
-    "MISSING CAP": "疑似未配戴安全帽，請現場確認。",
+    "MISSING CAP": "疑似未配戴無塵帽，請現場確認。",
     "MISSING MASK": "疑似未戴口罩或配戴不正確，請同仁儘速查看。",
 }
 

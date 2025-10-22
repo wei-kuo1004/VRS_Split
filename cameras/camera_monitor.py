@@ -172,6 +172,8 @@ class CameraMonitor:
                     else:
                         self.eye_close_counter = 0
                 else:
+                    # ===== 若未偵測到人臉，半透明清空畫面以避免鬼影 =====
+                    vis = cv2.addWeighted(base, 0.3, np.zeros_like(base), 0.7, 0)
                     self.reset_counters_face()
                     self.display_frame = vis
                     time.sleep(0.1)
@@ -204,7 +206,10 @@ class CameraMonitor:
                     else:
                         self.head_turn_counter = 0
                 else:
+                    # ===== 若未偵測到姿勢，半透明清空畫面以避免上一幀殘留 =====
+                    vis = cv2.addWeighted(base, 0.1, np.zeros_like(base), 0.7, 0)
                     self.reset_counters_pose()
+                    self.display_frame = vis
 
                 # ============================================================
                 # 🧠 加入防呆條件：若無人臉或姿勢，直接跳過 Mask/Mouth 判斷
@@ -220,7 +225,7 @@ class CameraMonitor:
                 cap_detected = False
                 mask_detected = False
                 mouth_detected = False
-                mask_conf = 0.0  # 🔧 初始化信心值，避免未定義問題
+                mask_conf = 0.0  # 初始化信心值
 
                 maskcap_results = self.maskcap_model(base, conf=0.25, iou=0.7, verbose=False)
                 for r in maskcap_results:
@@ -232,19 +237,19 @@ class CameraMonitor:
                         x1, y1, x2, y2 = map(int, box.xyxy[0])
                         label_name = self.maskcap_model.names[cls_id].lower()
 
-                        # ✅ 記錄 mask / cap / mouth 狀態
-                        if "cap" in label_name:
+                        # ===== 類別邏輯與信心門檻 =====
+                        if "cap" in label_name and conf >= 0.6:
                             cap_detected = True
-                            color = (0, 255, 0)
+                            color = (0, 255, 0)  # 綠色
                         elif "mask" in label_name:
                             mask_detected = True
-                            mask_conf = conf  # 🔧 記錄口罩信心值
-                            color = (0, 255, 255)
-                        elif "mouth" in label_name:
+                            mask_conf = conf
+                            color = (255, 255, 255)  # 白色
+                        elif "mouth" in label_name and conf >= 0.6:
                             mouth_detected = True
-                            color = (0, 0, 255)
+                            color = (0, 0, 255)  # 紅色
                         else:
-                            color = (128, 128, 128)
+                            color = (255, 255, 0)  # 黃色作為預設
 
                         self.draw_box(vis, (x1, y1, x2, y2), f"{label_name} {conf:.2f}", color)
 
@@ -258,7 +263,7 @@ class CameraMonitor:
                     self.missing_mask_count = 0
 
                 # ============================================================
-                # 缺帽邏輯（維持原本）
+                # 缺帽邏輯：cap 信心值需 >= 0.6 才算有戴
                 # ============================================================
                 if not cap_detected:
                     if not self.cooldown_mgr.is_in_cooldown(self.config["camera_id"], "MISSING CAP"):
@@ -274,7 +279,7 @@ class CameraMonitor:
             except Exception as e:
                 logging.error(f"[{self.config['camera_id']}] 推論錯誤：{e}")
                 logging.debug(traceback.format_exc())
-            time.sleep(0.05)
+            time.sleep(0.08)
 
     # =============================
     # 顯示畫面
@@ -287,7 +292,7 @@ class CameraMonitor:
                 disp = self.display_frame.copy()
                 self.draw_status_footer(disp)
                 cv2.imshow(win_name, disp)
-                if cv2.waitKey(1) & 0xFF == ord("q"):
+                if cv2.waitKey(2) & 0xFF == ord("q"):
                     self.running = False
                     break
             except Exception as e:
