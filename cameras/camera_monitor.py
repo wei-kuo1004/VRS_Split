@@ -287,6 +287,26 @@ class CameraMonitor:
 
     def display_thread_func(self):
         win_name = self.config["location"]
+
+        # ===== 可調參數 =====
+        max_cols = 4            # 每行最多幾個視窗
+        win_w, win_h = 360, 240 # 每個視窗大小
+        margin_x, margin_y = 10, 10  # 視窗間距（避免重疊）
+        base_x, base_y = 10, 10      # 第一列第一個視窗起始位置
+
+        # ===== 計算視窗顯示座標 =====
+        row = self.camera_index // max_cols
+        col = self.camera_index % max_cols
+        x = base_x + col * (win_w + margin_x)
+        y = base_y + row * (win_h + margin_y)
+
+        # ===== 建立可調整大小的視窗並移動位置 =====
+        cv2.namedWindow(win_name, cv2.WINDOW_NORMAL)
+        cv2.resizeWindow(win_name, win_w, win_h)
+        cv2.moveWindow(win_name, x, y)
+
+        logging.info(f"[{self.config['camera_id']}] 視窗位置 → ({x}, {y})")
+
         while self.running:
             try:
                 disp = self.display_frame.copy()
@@ -298,6 +318,7 @@ class CameraMonitor:
             except Exception as e:
                 logging.error(f"[{self.config['camera_id']}] 顯示錯誤：{e}")
                 time.sleep(0.2)
+
         cv2.destroyWindow(win_name)
 
     # =============================
