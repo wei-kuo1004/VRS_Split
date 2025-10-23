@@ -31,8 +31,8 @@ NOTIFY_URL = "https://lineapi.pcbut.com.tw:888/api/Push/notify-with-img"
 
 USERNAME = "utbot"
 PASSWORD = "mi2@admin5566"
-CHAT_ID = "2F0177B1-2AB0-471B-9001-E40B134F4D0F"  # ⚠️ 測試用聊天室群組ID
-#CHAT_ID = "83D9B831-E46E-46D2-A985-9CDB1175D462"  # ⚠️ VRS聊天室群組ID
+#CHAT_ID = "2F0177B1-2AB0-471B-9001-E40B134F4D0F"  # ⚠️ 測試用聊天室群組ID
+CHAT_ID = "83D9B831-E46E-46D2-A985-9CDB1175D462"  # ⚠️ VRS聊天室群組ID
 
 # ==========================================================
 # ⚙️ 佇列與 Token 管理

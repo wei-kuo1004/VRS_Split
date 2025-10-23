@@ -25,11 +25,12 @@ ALERT_COOLDOWNS = {
 
 
 class CameraMonitor:
-    def __init__(self, config, index, pose_model, maskcap_model):
+    def __init__(self, config, index, pose_model, maskcap_model,n_model=None):
         self.config = config
         self.camera_index = index
         self.pose_model = pose_model
         self.maskcap_model = maskcap_model
+        self.n_model = n_model
 
         self.frame = np.ones((480, 640, 3), dtype=np.uint8)
         self.display_frame = self.frame.copy()
@@ -174,11 +175,13 @@ class CameraMonitor:
                         self.eye_close_counter = 0
                 else:
                     # ===== 若未偵測到人臉，半透明清空畫面以避免鬼影 =====
-                    vis = cv2.addWeighted(base, 0.3, np.zeros_like(base), 0.7, 0)
+                    #vis = cv2.addWeighted(base, 0.3, np.zeros_like(base), 0.7, 0)
+                    #self.reset_counters_face()
+                    #self.display_frame = vis
+                    #time.sleep(0.1)
+                    #continue
                     self.reset_counters_face()
-                    self.display_frame = vis
-                    time.sleep(0.1)
-                    continue
+                    # vis 保持為 base（不改變）
 
                 # ====== YOLO Pose ======
                 pose_results = self.pose_model(base, verbose=False)
@@ -208,14 +211,37 @@ class CameraMonitor:
                         self.head_turn_counter = 0
                 else:
                     # ===== 若未偵測到姿勢，半透明清空畫面以避免上一幀殘留 =====
-                    vis = cv2.addWeighted(base, 0.1, np.zeros_like(base), 0.7, 0)
+                    #vis = cv2.addWeighted(base, 0.1, np.zeros_like(base), 0.7, 0)
+                    #self.reset_counters_pose()
+                    #self.display_frame = vis
+                    # 若未偵測到姿勢：不再壓暗畫面
+                    # 只重置 pose 相關計數，保留 vis 為原始畫面，之後由 n_model 判定是否為 person
                     self.reset_counters_pose()
-                    self.display_frame = vis
 
                 # ============================================================
-                # 🧠 改進版防呆條件：若未偵測到人 (main_person is None)，直接跳過
+                # 🧠 改進版防呆條件：若未偵測到 person (class_id == 0)，直接跳過
+                # person 的 class_id = 0，需達到最低信心值才算有效偵測
                 # ============================================================
-                if main_person is None:
+                # 使用 yolo11n 作 person gate（若有提供）
+                person_detected = False
+                person_conf_thr = 0.30
+                if self.n_model is not None:
+                    try:
+                        n_results = self.n_model(base, conf=person_conf_thr, verbose=False)
+                        # 只檢查並繪製 person (class_id == 0)
+                        person_detected = self.draw_persons(vis, n_results, conf_thr=person_conf_thr)
+                        logging.debug(f"[{self.config.get('camera_id','?')}] n_model person_detected={person_detected}")
+                    except Exception as e:
+                        logging.warning(f"[{self.config.get('camera_id','?')}] n_model 偵測錯誤：{e}")
+                else:
+                    # fallback: 使用原本的 pose-based 判定（若 main_person 已偵測到視為有人）
+                    # 若你原本有更複雜的 pose 判定邏輯，可在此保留/複製過來
+                    if main_person is not None:
+                        person_detected = True
+
+                if not person_detected:
+                    # 若沒有偵測到 person，畫面先押暗，重置口罩/安全帽計數並跳過後續檢測
+                    vis = cv2.addWeighted(base, 0.4, np.zeros_like(base), 0.2, 0)
                     self.missing_mask_count = 0
                     self.missing_cap_count = 0
                     self.display_frame = vis
@@ -239,14 +265,14 @@ class CameraMonitor:
                         label_name = self.maskcap_model.names[cls_id].lower()
 
                         # ===== 類別邏輯與信心門檻 =====
-                        if "cap" in label_name and conf >= 0.6:
+                        if "cap" in label_name and conf >= 0.55:
                             cap_detected = True
                             color = (0, 255, 0)  # 綠色
                         elif "mask" in label_name:
                             mask_detected = True
                             mask_conf = conf
                             color = (255, 255, 255)  # 白色
-                        elif "mouth" in label_name and conf >= 0.6:
+                        elif "mouth" in label_name and conf >= 0.55:
                             mouth_detected = True
                             color = (0, 0, 255)  # 紅色
                         else:
@@ -264,7 +290,7 @@ class CameraMonitor:
                     self.missing_mask_count = 0
 
                 # ============================================================
-                # 缺帽邏輯：cap 信心值需 >= 0.6 才算有戴
+                # 缺帽邏輯：cap 信心值需 >= 0.55 才算有戴
                 # ============================================================
                 if not cap_detected:
                     if not self.cooldown_mgr.is_in_cooldown(self.config["camera_id"], "MISSING CAP"):
@@ -425,7 +451,7 @@ class CameraMonitor:
         x1, y1, x2, y2 = map(int, box)
         font = cv2.FONT_HERSHEY_SIMPLEX
         scale = 0.6
-        thickness = 2
+        thickness = 1  # 改為 1，符合需求
         text_color = (0, 0, 0)  # 黑色文字
         (w, h), _ = cv2.getTextSize(label, font, scale, thickness)
 
@@ -439,10 +465,10 @@ class CameraMonitor:
         elif "mouth" in label_lower:
             color = (0, 0, 255)          # 紅色
         else:
-            color = color or (255, 255, 0)  # 黃色作為預設
+            color = color or (0, 255, 0)  # 預設保留綠色（可由呼叫方覆寫）
 
         # ===== 繪製框線 =====
-        cv2.rectangle(image, (x1, y1), (x2, y2), color, 1)
+        cv2.rectangle(image, (x1, y1), (x2, y2), color, thickness)
 
         # ===== 文字位置邏輯 =====
         if any(k in label_lower for k in ["cap", "mouth", "head"]):
@@ -457,6 +483,116 @@ class CameraMonitor:
         cv2.putText(image, label, (x1 + 3, y_text - 4), font, scale, text_color, thickness)
 
 
+    def draw_persons(self, image, n_results, conf_thr=0.30):
+        """
+        從 yolo (n_model) 的結果畫出 person bounding boxes（只畫 person）。
+        參數:
+          image: 要繪製的影像 (會就地繪製)
+          n_results: n_model(...) 回傳的結果 iterable
+          conf_thr: person 信心門檻
+        回傳:
+          bool - 是否至少偵測到一個 person
+        """
+        person_found = False
+        if n_results is None:
+            return False
+        for r in n_results:
+            if not hasattr(r, "boxes") or r.boxes is None:
+                continue
+            for box in r.boxes:
+                try:
+                    # 兼容 tensor/list 型態
+                    cls_val = box.cls
+                    conf_val = box.conf
+                    cls_id = int(cls_val[0]) if hasattr(cls_val, "__len__") else int(cls_val)
+                    conf = float(conf_val[0]) if hasattr(conf_val, "__len__") else float(conf_val)
+                except Exception:
+                    continue
+
+                # 只處理 person class_id == 0
+                if cls_id != 0 or conf < conf_thr:
+                    continue
+
+                # 取得 xyxy 座標
+                try:
+                    xy = box.xyxy[0]
+                    if hasattr(xy, "cpu"):
+                        xy = xy.cpu().numpy()
+                    x1, y1, x2, y2 = map(int, xy)
+                except Exception:
+                    # 若無法取得座標，略過此 box
+                    continue
+
+                # 畫框與標籤：person 改為黃色 (BGR: 0,255,255)
+                label = f"person {conf:.2f}"
+                self.draw_box(image, (x1, y1, x2, y2), label, color=(0, 255, 255))
+                person_found = True
+        return person_found
+
+    def draw_n_results(self, image, n_results, conf_thr=0.30):
+        """
+        把 yolo11n (n_model) 回傳的所有偵測項目繪製到 image。
+        - 會顯示 <label> <conf>，並用不同顏色區分 class id。
+        - 返回繪製的總 box 數量（可用於判斷是否有偵測到任何物件）。
+        """
+        if n_results is None:
+            return 0
+
+        # 取得 class name 字典（若 n_model 有提供）
+        names = {}
+        if hasattr(self, "n_model") and self.n_model is not None:
+            names = getattr(self.n_model, "names", None) or getattr(getattr(self.n_model, "model", None), "names", {}) or {}
+
+        # 簡單 palette，會根據 class id 取模
+        palette = [
+            (255,  80,  80), ( 80,255,  80), ( 80, 80,255), (255,255, 80),
+            (255, 80,255), ( 80,255,255), (200,120, 70), (120,200, 70),
+            (70,120,200), (200, 70,120)
+        ]
+
+        drawn = 0
+        for r in n_results:
+            if not hasattr(r, "boxes") or r.boxes is None:
+                continue
+            for box in r.boxes:
+                try:
+                    cls_val = box.cls
+                    conf_val = box.conf
+                    cls_id = int(cls_val[0]) if hasattr(cls_val, "__len__") else int(cls_val)
+                    conf = float(conf_val[0]) if hasattr(conf_val, "__len__") else float(conf_val)
+                except Exception:
+                    continue
+
+                if conf < conf_thr:
+                    continue
+
+                # 取得坐標 (優先 xyxy，否則用 xywh 轉換)
+                try:
+                    if hasattr(box, "xyxy"):
+                        xy = box.xyxy[0]
+                        if hasattr(xy, "cpu"):
+                            xy = xy.cpu().numpy()
+                        x1, y1, x2, y2 = map(int, xy)
+                    elif hasattr(box, "xywh"):
+                        arr = box.xywh[0]
+                        if hasattr(arr, "cpu"):
+                            arr = arr.cpu().numpy()
+                        cx, cy, w, h = arr
+                        x1 = int(cx - w / 2); y1 = int(cy - h / 2)
+                        x2 = int(cx + w / 2); y2 = int(cy + h / 2)
+                    else:
+                        continue
+                except Exception:
+                    continue
+
+                label = names.get(cls_id, str(cls_id))
+                text = f"{label} {conf:.2f}"
+                color = palette[cls_id % len(palette)]
+                # 使用既有 draw_box（會繪製標籤背景），傳 color 以覆寫預設
+                self.draw_box(image, (x1, y1, x2, y2), text, color=color)
+                drawn += 1
+
+        return drawn
 
     def reset_counter(self, alert_type):
         if alert_type == "EYES CLOSED":
