@@ -20,7 +20,7 @@ def main():
         return
 
     # 載入模型
-    pose_model, maskcap_model = load_models()
+    pose_model, maskcap_model, n_model = load_models()
 
     # 啟動上傳背景執行緒
     from utils.uploader import start_upload_workers
@@ -40,7 +40,7 @@ def main():
 
     # 啟動每台攝影機監控
     for idx, cfg in enumerate(valid_configs):
-        monitor = CameraMonitor(cfg, idx, pose_model, maskcap_model)
+        monitor = CameraMonitor(cfg, idx, pose_model, maskcap_model, n_model)
         threading.Thread(target=monitor.read_thread_func, daemon=True).start()
         threading.Thread(target=monitor.process_thread_func, daemon=True).start()
         threading.Thread(target=monitor.display_thread_func, daemon=True).start()
