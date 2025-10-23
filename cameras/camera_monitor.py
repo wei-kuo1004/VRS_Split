@@ -13,6 +13,7 @@ from utils.schedule_checker import is_within_time_period, get_current_status
 from utils.head_angle import calculate_head_angle
 from utils.helpers import safe_mkdir, get_timestamp, uuid_suffix
 from utils.uploader import upload_queue
+import screeninfo
 
 # === 警報冷卻設定 ===
 ALERT_COOLDOWNS = {
@@ -212,9 +213,9 @@ class CameraMonitor:
                     self.display_frame = vis
 
                 # ============================================================
-                # 🧠 加入防呆條件：若無人臉或姿勢，直接跳過 Mask/Mouth 判斷
+                # 🧠 改進版防呆條件：若未偵測到人 (main_person is None)，直接跳過
                 # ============================================================
-                if not has_face and main_person is None:
+                if main_person is None:
                     self.missing_mask_count = 0
                     self.missing_cap_count = 0
                     self.display_frame = vis
@@ -288,25 +289,45 @@ class CameraMonitor:
     def display_thread_func(self):
         win_name = self.config["location"]
 
-        # ===== 可調參數 =====
-        max_cols = 4            # 每行最多幾個視窗
-        win_w, win_h = 360, 240 # 每個視窗大小
-        margin_x, margin_y = 10, 10  # 視窗間距（避免重疊）
-        base_x, base_y = 10, 10      # 第一列第一個視窗起始位置
+        # === Step 1. 取得螢幕解析度 ===
+        screen = screeninfo.get_monitors()[0]
+        screen_w, screen_h = screen.width, screen.height
 
-        # ===== 計算視窗顯示座標 =====
+        # === Step 2. 自動計算行列與每個視窗大小 ===
+        total_cameras = self.config.get("total_cameras", 16)  # 若主程式可提供總攝影機數，可傳入此參數
+        max_cols = min(4, total_cameras)                      # 每行最多 4 個，可依需求調整
+        rows = (total_cameras + max_cols - 1) // max_cols     # 自動換行數
+        aspect_ratio = 4 / 3                                  # 保持監控畫面比例
+        margin_x, margin_y = 10, 10                           # 視窗間距
+
+        # 每個視窗寬高（含邊距）
+        win_w = int((screen_w - (max_cols + 1) * margin_x) / max_cols)
+        win_h = int(win_w / aspect_ratio)
+
+        # 若總高度超過螢幕，則縮小比例
+        total_height = rows * (win_h + margin_y)
+        if total_height > screen_h:
+            scale = screen_h / total_height
+            win_w = int(win_w * scale)
+            win_h = int(win_h * scale)
+
+        # === Step 3. 計算當前攝影機座標 ===
         row = self.camera_index // max_cols
         col = self.camera_index % max_cols
-        x = base_x + col * (win_w + margin_x)
-        y = base_y + row * (win_h + margin_y)
+        x = margin_x + col * (win_w + margin_x)
+        y = margin_y + row * (win_h + margin_y)
 
-        # ===== 建立可調整大小的視窗並移動位置 =====
+        # === Step 4. 建立視窗並移動位置 ===
         cv2.namedWindow(win_name, cv2.WINDOW_NORMAL)
         cv2.resizeWindow(win_name, win_w, win_h)
         cv2.moveWindow(win_name, x, y)
 
-        logging.info(f"[{self.config['camera_id']}] 視窗位置 → ({x}, {y})")
+        logging.info(
+            f"[{self.config['camera_id']}] 顯示 → ({x},{y}) "
+            f"大小 {win_w}x{win_h}, 螢幕 {screen_w}x{screen_h}"
+        )
 
+        # === Step 5. 顯示主迴圈 ===
         while self.running:
             try:
                 disp = self.display_frame.copy()
@@ -318,7 +339,6 @@ class CameraMonitor:
             except Exception as e:
                 logging.error(f"[{self.config['camera_id']}] 顯示錯誤：{e}")
                 time.sleep(0.2)
-
         cv2.destroyWindow(win_name)
 
     # =============================

@@ -6,7 +6,7 @@ from ultralytics import YOLO
 from utils.helpers import resource_path
 
 def load_models():
-    pose_path = resource_path("model/yolo11n-pose.pt")
+    pose_path = resource_path("model/yolo11s-pose.pt")
     mask_path = resource_path("model/mask_cap/best.pt")
 
     # 1) 路徑檢查
