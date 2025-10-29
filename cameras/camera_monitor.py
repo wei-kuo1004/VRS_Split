@@ -17,10 +17,10 @@ import screeninfo
 
 # === 警報冷卻設定 ===
 ALERT_COOLDOWNS = {
-    "EYES CLOSED": 10,
-    "HEAD TURNED": 10,
-    "MISSING CAP": 10,
-    "MISSING MASK": 10,
+    "EYES CLOSED": 300,
+    "HEAD TURNED": 300,
+    "MISSING CAP": 300,
+    "MISSING MASK": 300,
 }
 
 
@@ -224,7 +224,7 @@ class CameraMonitor:
                 # ============================================================
                 # 使用 yolo11n 作 person gate（若有提供）
                 person_detected = False
-                person_conf_thr = 0.30
+                person_conf_thr = 0.50
                 if self.n_model is not None:
                     try:
                         n_results = self.n_model(base, conf=person_conf_thr, verbose=False)
