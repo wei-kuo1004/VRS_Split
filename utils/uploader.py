@@ -11,11 +11,16 @@
 # 2. 加入 requests timeout、重試機制與錯誤復原
 # 3. 增加佇列健康監控 log
 # ==========================================================
+# uploader.py (v1.2)
+# 改進內容：
+# 1. 新增Email通知功能
+# ==========================================================
 
 import os
 import cv2
-import json
 import time
+import json
+import uuid
 import logging
 import threading
 import requests
@@ -28,18 +33,19 @@ from utils.helpers import safe_mkdir, get_timestamp, uuid_suffix
 # ==========================================================
 LOGIN_URL = "https://lineapi.pcbut.com.tw:888/api/account/login"
 NOTIFY_URL = "https://lineapi.pcbut.com.tw:888/api/Push/notify-with-img"
+EMAIL_UPLOAD_URL = "https://eip.pcbut.com.tw/File/UploadYoloImage"
 
 USERNAME = "utbot"
 PASSWORD = "mi2@admin5566"
-#CHAT_ID = "2F0177B1-2AB0-471B-9001-E40B134F4D0F"  # ⚠️ 測試用聊天室群組ID
-CHAT_ID = "83D9B831-E46E-46D2-A985-9CDB1175D462"  # ⚠️ VRS聊天室群組ID
+#CHAT_ID = "83D9B831-E46E-46D2-A985-9CDB1175D462"  # VRS聊天室群組ID
+CHAT_ID = "2F0177B1-2AB0-471B-9001-E40B134F4D0F"  # 測試用群組ID
 
 # ==========================================================
 # ⚙️ 佇列與 Token 管理
 # ==========================================================
 upload_queue = Queue(maxsize=500)
 _token_cache = {"token": None, "expire_time": 0}
-_queue_log_timer = 0  # 控制 queue size log 頻率
+_queue_log_timer = 0
 
 # ==========================================================
 # 📘 警報類型對應字典
@@ -90,10 +96,9 @@ def get_line_token(force_refresh=False):
         return None
 
 # ==========================================================
-# 📨 發送訊息至 LineGPT
+# 📨 傳送訊息與圖片到 LineGPT 群組
 # ==========================================================
 def send_line_message(message: str, file_path: str = None, retries: int = 3):
-    """傳送訊息與圖片到 LineGPT 群組"""
     token = get_line_token()
     if not token:
         logging.error("❌ 無法取得有效 Token，略過此次發送")
@@ -114,7 +119,7 @@ def send_line_message(message: str, file_path: str = None, retries: int = 3):
                 data=data,
                 files=files,
                 verify=False,
-                timeout=(10, 15),  # (connect, read)
+                timeout=(10, 15),
             )
 
             if response.status_code in (200, 201):
@@ -142,17 +147,45 @@ def send_line_message(message: str, file_path: str = None, retries: int = 3):
     return False
 
 # ==========================================================
-# 📦 上傳主執行緒（多執行緒安全版本）
+# ✉️ 新增：寄信通知 API 函式
+# ==========================================================
+def send_email_notification(config, alert_type, file_path, result_msg):
+    """呼叫 EIP API 觸發後端寄信"""
+    try:
+        api_payload = {
+            "cameraId": config.get("camera_id", ""),
+            "location": config.get("location", ""),
+            "eventName": "專注度辨識",
+            "eventDate": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "notes": alert_type,
+            "fileName": os.path.basename(file_path),
+            "result": result_msg,
+        }
+
+        with open(file_path, "rb") as img_file:
+            files = {"files": (os.path.basename(file_path), img_file, "image/jpeg")}
+            resp = requests.post(
+                EMAIL_UPLOAD_URL, data=api_payload, files=files, verify=False, timeout=10
+            )
+
+        if resp.status_code == 200:
+            logging.info(f"📧 已通知後端寄信成功 ({config.get('location','')} | {alert_type})")
+        else:
+            logging.warning(f"⚠️ 寄信 API 回應異常：{resp.status_code} - {resp.text}")
+
+    except Exception as e:
+        logging.error(f"❌ 寄信 API 發送錯誤：{e}")
+
+# ==========================================================
+# 📦 上傳主執行緒
 # ==========================================================
 def upload_worker(worker_id=1):
-    """處理 upload_queue 中的任務，並自動推送到 LineGPT 聊天室。"""
     global _queue_log_timer
 
     while True:
         try:
             annotated_image, config, alert_type = upload_queue.get(timeout=2)
         except Empty:
-            # 定期顯示 queue 狀態
             now = time.time()
             if now - _queue_log_timer > 60:
                 _queue_log_timer = now
@@ -166,7 +199,6 @@ def upload_worker(worker_id=1):
             else:
                 result_msg = valid_result_msgs[alert_type]
 
-            # === 建立本地圖片檔 ===
             date_folder = datetime.now().strftime("%Y%m%d")
             folder = os.path.join("capture", date_folder)
             safe_mkdir(folder)
@@ -178,7 +210,6 @@ def upload_worker(worker_id=1):
             file_path = os.path.join(folder, filename)
             cv2.imwrite(file_path, annotated_image, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
 
-            # === 組成正式通知訊息 ===
             message = (
                 "【影像辨識通知】\n"
                 "系統已偵測到疑似違規行為或潛在安全風險：\n"
@@ -193,14 +224,13 @@ def upload_worker(worker_id=1):
 
             success = send_line_message(message, file_path=file_path)
 
+            # === 新增呼叫寄信 API ===
+            send_email_notification(config, alert_type, file_path, result_msg)
+
             if success:
-                logging.info(
-                    f"✅ [Worker {worker_id}] LineGPT 推播完成：{config['location']} | {alert_type}"
-                )
+                logging.info(f"✅ [Worker {worker_id}] 任務完成：{config['location']} | {alert_type}")
             else:
-                logging.error(
-                    f"❌ [Worker {worker_id}] LineGPT 推播失敗：{config['location']} | {alert_type}"
-                )
+                logging.error(f"❌ [Worker {worker_id}] LineGPT 推播失敗：{config['location']} | {alert_type}")
 
         except Exception as e:
             logging.error(f"❌ [Worker {worker_id}] 上傳工作發生錯誤：{e}")
@@ -211,8 +241,7 @@ def upload_worker(worker_id=1):
 # 🚀 啟動多執行緒上傳池
 # ==========================================================
 def start_upload_workers(num_workers=3):
-    """啟動多執行緒上傳背景執行緒"""
     for i in range(num_workers):
-        t = threading.Thread(target=upload_worker, args=(i+1,), daemon=True)
+        t = threading.Thread(target=upload_worker, args=(i + 1,), daemon=True)
         t.start()
     logging.info(f"🧵 已啟動 {num_workers} 個上傳工作執行緒")
