@@ -1,7 +1,6 @@
 import os
 import torch
 import numpy as np
-import logging
 from ultralytics import YOLO
 from utils.helpers import resource_path
 
@@ -16,8 +15,19 @@ def load_models():
             raise FileNotFoundError(f"找不到模型：{p}")
 
     # 2) 設備選擇
-    device = "cuda:0" if torch.cuda.is_available() else "cpu"
-    logging.info(f"✅ 使用設備: {device}")
+    if torch.cuda.is_available():
+        if torch.cuda.device_count() > 1:
+            device = "cuda:1"  # 使用第二張 GPU
+            print("✅ 使用第二張 GPU: cuda:1")
+        else:
+            device = "cuda:0"  # 使用第一張 GPU
+            print("✅ 只有一張 GPU，使用: cuda:0")
+    else:
+        device = "cpu"  # 使用 CPU
+        print("❌ 沒有可用的 GPU，使用 CPU")
+
+    # 打印所選擇的設備
+    print(f"📦 當前使用的設備: {device}")
 
     # 3) 載入模型（先建立，再做任何與 model 相關的 log）
     pose_model = YOLO(pose_path).to(device)
@@ -34,31 +44,31 @@ def load_models():
     try:
         pose_model.predict(dummy, verbose=False)
     except Exception as e:
-        logging.warning(f"⚠️ Pose 模型暖機警告：{e}")
+        print(f"⚠️ Pose 模型暖機警告：{e}")
 
     try:
         mask_model.predict(dummy, verbose=False)
     except Exception as e:
-        logging.warning(f"⚠️ MaskCap 模型暖機警告：{e}")
+        print(f"⚠️ MaskCap 模型暖機警告：{e}")
 
     try:
         n_model.predict(dummy, verbose=False)
     except Exception as e:
-        logging.warning(f"⚠️ yolo11n 模型暖機警告：{e}")    
+        print(f"⚠️ yolo11n 模型暖機警告：{e}")    
 
     # 6) 類別表印出（此時 model 一定存在，不會 UnboundLocalError）
     try:
-        logging.info(f"✅ Pose 模型類別表: {pose_model.names}")
+        print(f"✅ Pose 模型類別表: {pose_model.names}")
     except Exception:
         pass
     try:
-        logging.info(f"✅ MaskCap 模型類別表: {mask_model.names}")
+        print(f"✅ MaskCap 模型類別表: {mask_model.names}")
     except Exception:
         pass
     try:
-        logging.info(f"✅ yolo11n 模型類別表: {n_model.names}")
+        print(f"✅ yolo11n 模型類別表: {n_model.names}")
     except Exception:
         pass
 
-    logging.info("✅ 模型初始化完成 (Pose + MaskCap + yolo11n)")
+    print("✅ 模型初始化完成 (Pose + MaskCap + yolo11n)")
     return pose_model, mask_model, n_model

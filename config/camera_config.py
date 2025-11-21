@@ -22,7 +22,7 @@ def create_default_config(path="cameras_config.txt"):
         json.dump(default, f, ensure_ascii=False, indent=4)
     logging.info(f"✅ 已建立預設設定檔 {path}")
 
-def load_cameras_config(path="cameras_config14.txt"):
+def load_cameras_config(path="cameras_config_15.txt"):
     if not os.path.exists(path):
         create_default_config(path)
     try:
