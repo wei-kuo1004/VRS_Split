@@ -27,7 +27,7 @@ def main():
 
     # 啟動上傳背景執行緒
     from utils.uploader import start_upload_workers
-    start_upload_workers(num_workers=3)  # 建議3~5個執行緒
+    start_upload_workers(num_workers=8)  # 建議3~5個執行緒
 
     valid_configs = []
     for cam in cameras_config:

@@ -283,7 +283,8 @@ class CameraMonitor:
                 # ============================================================
                 # 🔧 改進版邏輯：若嘴巴偵測到且口罩信心度低，視為「未戴口罩」
                 # ============================================================
-                if mouth_detected and (not mask_detected or mask_conf < 0.8):
+                #if mouth_detected and (not mask_detected or mask_conf < 0.8):
+                if mouth_detected:
                     if not self.cooldown_mgr.is_in_cooldown(self.config["camera_id"], "MISSING MASK"):
                         self.missing_mask_count += 1
                 else:
